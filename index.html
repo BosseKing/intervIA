@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Agent AI - Interview Automatique</title>
+  <link rel="stylesheet" href="css/elegant_style.css">
+  <!-- Dark mode toggle -->
+  <div id="theme-toggle">
+    <input type="checkbox" id="dark-mode-checkbox">
+    <label for="dark-mode-checkbox" class="toggle-slider"></label>
+    <label for="dark-mode-checkbox">Mode sombre</label>
+  </div>
+  <!-- Color customizer -->
+  <div id="color-customizer">
+    <label for="primary-color-input">Couleur principale:</label>
+    <input type="color" id="primary-color-input" value="#007bff">
+  </div>
+</head>
+<body>
+  <!-- Interface candidat -->
+  <div class="panel">
+    <h2>Candidat</h2>
+    <div id="chat"></div>
+    <input id="userInput" type="text" placeholder="Réponds ici..." />
+    <button onclick="sendAnswer()">Envoyer</button>
+  </div>
+
+  <!-- Interface recruteur -->
+  <div class="panel" id="recruiterPanel">
+    <h2>Recruteur</h2>
+    <p>Évaluation de l'entretien :</p>
+    <div id="feedback">En attente des réponses du candidat...</div>
+    <div id="finalResults" class="final-results" style="display: none;">
+      <h3>Résultats finaux</h3>
+      <div id="averageScore"></div>
+      <div id="conclusion"></div>
+    </div>
+  </div>
+
+  <script>
+    const apiKey = "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";
+    const model = "openai/gpt-3.5-turbo";
+    const questions = [
+      {
+        text: "Décrivez votre expérience avec JavaScript en détail, en mentionnant les frameworks que vous avez utilisés.",
+        criteria: "Profondeur technique, précision des technologies mentionnées, pertinence pour le poste"
+      },
+      {
+        text: "Donnez un exemple concret de projet en équipe où vous avez rencontré des difficultés. Comment les avez-vous résolues?",
+        criteria: "Capacité à travailler en équipe, résolution de problèmes, communication"
+      },
+      {
+        text: "Comment gérez-vous les délais serrés et les demandes changeantes? Donnez un exemple précis.",
+        criteria: "Gestion du stress, adaptabilité, organisation"
+      },
+      {
+        text: "Pourquoi pensez-vous être le meilleur candidat pour ce poste? Soyez précis et argumentez.",
+        criteria: "Préparation à l'entretien, connaissance de l'entreprise, arguments convaincants"
+      }
+    ];
+    let currentQuestion = 0;
+    let chat = document.getElementById("chat");
+    let feedbackPanel = document.getElementById("feedback");
+    let finalResultsPanel = document.getElementById("finalResults");
+    let averageScorePanel = document.getElementById("averageScore");
+    let conclusionPanel = document.getElementById("conclusion");
+    let allFeedback = [];
+
+    function sendMessage(text, sender) {
+      const div = document.createElement("div");
+      div.className = `message ${sender}`;
+      div.innerHTML = `<strong>${sender === "ai" ? "Interviewer" : "Candidat"}:</strong> ${text}`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function sendAnswer() {
+      const input = document.getElementById("userInput");
+      const answer = input.value.trim();
+      if (!answer) return;
+
+      sendMessage(answer, "user");
+      input.value = "";
+
+      evaluateAnswer(questions[currentQuestion], answer);
+      currentQuestion++;
+      
+      if (currentQuestion < questions.length) {
+        setTimeout(() => {
+          sendMessage(questions[currentQuestion].text, "ai");
+        }, 1000);
+      } else {
+        setTimeout(() => {
+          showFinalFeedback();
+        }, 1500);
+      }
+    }
+
+    async function evaluateAnswer(question, answer) {
+      const prompt = `Tu es un intervieweur technique strict et exigeant. Tu dois évaluer la réponse du candidat de manière rigoureuse mais  indulgente.
+      
+      Question: "${question.text}"
+      Critères d'évaluation: ${question.criteria}
+      Réponse du candidat: "${answer}"
+
+      Analyse STRICTE selon ces règles:
+      1. Note sur 10 (0=mauvais, 10=excellent) - sois indulgent 
+      2. Commentaire technique détaillé pointant les lacunes
+      3. Conseils précis pour améliorer la réponse
+      
+      Format de réponse EXCLUSIVEMENT en JSON VALIDE:
+      {
+        "note": nombre,
+        "commentaire": "texte",
+        "conseil": "texte"
+      }`;
+
+      try {
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.3,
+            response_format: { type: "json_object" }
+          })
+        });
+
+        const data = await res.json();
+        const content = data?.choices?.[0]?.message?.content;
+        
+        if (content) {
+          const result = JSON.parse(content);
+          if (typeof result.note !== 'number' || !result.commentaire || !result.conseil) {
+            throw new Error("Format de réponse invalide");
+          }
+          
+          if (result.note > 7 && !answer.includes("exemple") && !answer.includes("concret")) {
+            result.note = 6;
+            result.commentaire += " [Note réduite - manque d'exemples concrets]";
+          }
+          
+          allFeedback.push({ 
+            question: question.text,
+            criteria: question.criteria,
+            ...result 
+          });
+          updateRecruiterPanel();
+        }
+      } catch (error) {
+        console.error("Erreur d'évaluation:", error);
+        allFeedback.push({
+          question: question.text,
+          note: 0,
+          commentaire: "Erreur d'évaluation - réponse non analysable",
+          conseil: "Reprendre la réponse avec plus de structure"
+        });
+        updateRecruiterPanel();
+      }
+    }
+
+    function updateRecruiterPanel() {
+      let html = "";
+      allFeedback.forEach((fb, i) => {
+        html += `❓ <strong>Question ${i + 1}:</strong> ${fb.question}\n`;
+        html += `📋 <strong>Critères:</strong> ${fb.criteria}\n`;
+        html += `📊 <strong>Note:</strong> <span class="${fb.note < 5 ? 'strict' : ''}">${fb.note}/10</span>\n`;
+        html += `🔍 <strong>Analyse:</strong> ${fb.commentaire}\n`;
+        html += `💡 <strong>Conseil:</strong> ${fb.conseil}\n\n`;
+        html += "--------------------------------\n\n";
+      });
+
+      feedbackPanel.innerHTML = html;
+    }
+
+    function showFinalFeedback() {
+      updateRecruiterPanel();
+      
+      // Calcul de la moyenne
+      let total = 0;
+      let validCount = 0;
+      allFeedback.forEach(fb => {
+        if (typeof fb.note === "number") {
+          total += fb.note;
+          validCount++;
+        }
+      });
+
+      if (validCount > 0) {
+        const avg = total / validCount;
+        averageScorePanel.innerHTML = `📈 <strong>Moyenne générale:</strong> <span class="${avg < 5 ? 'strict' : ''}">${avg.toFixed(1)}/10</span>`;
+        
+        if (avg >= 8) {
+          conclusionPanel.innerHTML = "✅ <strong>Conclusion:</strong> Candidat exceptionnel - À recruter immédiatement";
+        } else if (avg >= 6) {
+          conclusionPanel.innerHTML = "⚠️ <strong>Conclusion:</strong> Candidat acceptable - À considérer avec des réserves";
+        } else {
+          conclusionPanel.innerHTML = "❌ <strong>Conclusion:</strong> Candidat non retenu - Ne répond pas aux exigences";
+        }
+      }
+
+      // Afficher la section des résultats finaux
+      finalResultsPanel.style.display = "block";
+      sendMessage("Entretien terminé. Votre performance a été rigoureusement évaluée. Consultez le panneau recruteur pour les détails complets.", "ai");
+    }
+
+    // Démarrer l'entretien
+    window.onload = () => {
+      sendMessage("Bonjour. Je vais vous poser une série de questions techniques. Soyez précis et concret dans vos réponses. Des réponses vagues ou incomplètes seront mal notées. Compris?", "ai");
+      setTimeout(() => {
+        sendMessage(questions[currentQuestion].text, "ai");
+      }, 1500);
+    };
+
+    // Dark mode toggle
+    document.getElementById('dark-mode-checkbox').addEventListener('change', function() {
+      document.body.classList.toggle('dark-mode');
+    });
+
+    // Color customization
+    document.getElementById('primary-color-input').addEventListener('input', function() {
+      document.documentElement.style.setProperty('--primary-color', this.value);
+    });
+  </script>
+</body>
+</html>
