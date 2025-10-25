@@ -10,13 +10,15 @@
   <!-- Navbar for theme choices -->
   <nav id="theme-navbar">
     <div class="theme-buttons">
-      <button onclick="setTheme('blue')">Bleu</button>
-      <button onclick="setTheme('green')">Vert</button>
-      <button onclick="setTheme('purple')">Violet</button>
+      <div class="color-circle" style="background-color: #007bff;" onclick="setTheme('blue')" title="Bleu"></div>
+      <div class="color-circle" style="background-color: #28a745;" onclick="setTheme('green')" title="Vert"></div>
+      <div class="color-circle" style="background-color: #6f42c1;" onclick="setTheme('purple')" title="Violet"></div>
+      <div class="color-circle" style="background-color: #dc3545;" onclick="setTheme('red')" title="Rouge"></div>
+      <div class="color-circle" style="background-color: #fd7e14;" onclick="setTheme('orange')" title="Orange"></div>
+      <div class="color-circle" style="background-color: #e83e8c;" onclick="setTheme('pink')" title="Rose"></div>
     </div>
     <div class="right-controls">
       <button id="theme-toggle-btn" onclick="toggleTheme()">☀️</button>
-      <input type="color" id="custom-color-input" value="#007bff" onchange="setCustomColor(this.value)">
     </div>
   </nav>
   <!-- Interface candidat -->
@@ -24,7 +26,7 @@
   
     <div id="chat"></div>
     <input id="userInput" type="text" placeholder="Réponds ici..." />
-    <button onclick="sendAnswer()">Envoyer</button>
+    <button id="sendBtn" onclick="sendAnswer()" disabled>Envoyer</button>
   </div>
 
   <!-- Interface recruteur -->
@@ -223,7 +225,12 @@
 
       const savedColor = localStorage.getItem('primary-color') || '#007bff';
       setPrimaryColor(savedColor);
-      document.getElementById('custom-color-input').value = savedColor;
+
+      // Enable/disable send button based on input
+      document.getElementById('userInput').addEventListener('input', function() {
+        const btn = document.getElementById('sendBtn');
+        btn.disabled = this.value.trim() === '';
+      });
 
       sendMessage("Bonjour. Je vais vous poser une série de questions techniques. Soyez précis et concret dans vos réponses. Des réponses vagues ou incomplètes seront mal notées. Compris?", "ai");
       setTimeout(() => {
@@ -239,6 +246,12 @@
         setPrimaryColor('#28a745');
       } else if (theme === 'purple') {
         setPrimaryColor('#6f42c1');
+      } else if (theme === 'red') {
+        setPrimaryColor('#dc3545');
+      } else if (theme === 'orange') {
+        setPrimaryColor('#fd7e14');
+      } else if (theme === 'pink') {
+        setPrimaryColor('#e83e8c');
       }
     }
 
@@ -254,10 +267,6 @@
         btn.innerHTML = '🌙';
         localStorage.setItem('theme-mode', 'dark');
       }
-    }
-
-    function setCustomColor(color) {
-      setPrimaryColor(color);
     }
 
     function setPrimaryColor(color) {
